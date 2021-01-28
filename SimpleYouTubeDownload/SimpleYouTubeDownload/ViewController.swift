@@ -9,7 +9,7 @@
 import Cocoa
 
 
-class ViewController: NSViewController {
+class ViewController: NSViewController, NSTextFieldDelegate {
 
     var downloadLocation:URL? = nil
     
@@ -38,7 +38,8 @@ class ViewController: NSViewController {
         setDestinationButton.action = #selector(self.setDestinationButtonAction)
         statusLabel.isEnabled = false
         titleLabel.isEnabled = false
-
+        urlField.delegate = self
+        urlField.placeholderString = "YouTube URL"
          srtOn = NSButton.init(checkboxWithTitle:"Captions", target: self, action: #selector(self.changeSRT))
         view.addSubview(srtOn)
 
@@ -101,6 +102,15 @@ class ViewController: NSViewController {
         if let url = chooseFolder() {
             downloadLocation = url
         }
+    }
+    
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if (commandSelector == #selector(NSResponder.insertNewline(_:))) {
+            startButtonAction()
+            
+            return true
+        }
+        return false
     }
     @objc func startButtonAction() {
         if downloadLocation == nil {
@@ -182,13 +192,43 @@ class ViewController: NSViewController {
                 if let downLocation = self.downloadLocation {
                     let saveURL = downLocation.appendingPathComponent(
                         filename)
-                    try? FileManager.default.moveItem(at: locationURL, to: saveURL); do { }
+                    try? FileManager.default.moveItem(at: locationURL, to: saveURL); do {
+                        if FileManager.default.fileExists(atPath:saveURL.path) {
+                            DispatchQueue.main.async {
+                                self.activeDownloads[url] = nil
+                                self.done(true)
+                            }
+                        } else {
+                            
+                            var fixedSaveURL = downLocation.appendingPathComponent(
+                                "download.mp4")
+                            if FileManager.default.fileExists(atPath:fixedSaveURL.path) {
+                                var count = 1
+                                while(true) {
+                                    fixedSaveURL = downLocation.appendingPathComponent(
+                                    "download\(count).mp4")
+                                    if FileManager.default.fileExists(atPath:fixedSaveURL.path) == false {
+                                        break
+                                    }
+                                    count += 1
+                                }
+                            }
+                            
+                            try? FileManager.default.moveItem(at: locationURL, to: fixedSaveURL); do {
+                                var success = false
+                                if FileManager.default.fileExists(atPath:fixedSaveURL.path) {
+                                    success = true
+                                }
+                                DispatchQueue.main.async {
+                                    self.activeDownloads[url] = nil
+                                    self.done(success)
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            DispatchQueue.main.async {
-                self.activeDownloads[url] = nil
-                self.done(true)
-            }
+            
         }
         download.task!.resume()
         download.isDownloading = true
